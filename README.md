@@ -4,9 +4,9 @@ Laboratório prático de estudo de vulnerabilidades em contratos inteligentes (S
 
 ## 🎯 Inspiração
 
-Este laboratório foi inspirado no incidente de segurança ocorrido na **Binance (Outubro de 2026)**, onde atacantes (atribuídos ao grupo Lazarus) exploraram a funcionalidade **EIP-7702** do Ethereum para sequestrar a execução de uma carteira e drenar fundos bilionários.
+Este laboratório foi inspirado em grandes incidentes de segurança do ecossistema Web3, incluindo o ataque à **Binance (2026)** via **EIP-7702** e o clássico **The DAO Hack (2016)** via **Reentrancy**.
 
-O objetivo deste repositório é compreender, na prática, como falhas de controle de acesso e o uso indevido de `delegatecall` podem levar ao sequestro de contratos e carteiras.
+O objetivo deste repositório é compreender, na prática, como falhas de lógica e o uso indevido de funções de baixo nível podem levar ao sequestro de contratos e à drenagem de fundos.
 
 ---
 
@@ -16,17 +16,18 @@ O objetivo deste repositório é compreender, na prática, como falhas de contro
 **Conceito:** Falha de permissão em funções que alteram o estado do contrato.
 - **Cenário:** Um contrato `SimpleStorage` que permite que qualquer pessoa altere o valor armazenado.
 - **Correção:** Implementação do modificador `onlyOwner` para restringir o acesso.
-- **Local:** `lab1/`
 
 ### 🔹 Lab 2: Delegatecall (Hijack de Contexto)
 **Conceito:** Execução de código externo no contexto de um contrato vulnerável.
 - **Cenário:** Um contrato `VulnerableDelegate` que executa código de um endereço arbitrário via `delegatecall`, permitindo que um atacante sobrescreva a variável `owner`.
-- **Local:** `lab2/`
 
 ### 🔹 Lab 3: Simulação de Sweeper (EIP-7702)
 **Conceito:** Sequestro de carteira e drenagem de fundos.
-- **Cenário:** Simulação de uma carteira vítima que "delega" a execução de seu código para um contrato malicioso (`MaliciousSweeper`), esvaziando seu saldo.
-- **Local:** `lab3/`
+- **Cenário:** Simulação de uma carteira vítima que "delega" a execução de seu código para um contrato malicioso (`MaliciousSweeper`), esvaziando seu saldo. Inspirado no incidente da Binance (2026).
+
+### 🔹 Lab 4: Reentrancy (Drenagem de Banco)
+**Conceito:** Chamada recursiva a uma função antes que o estado do contrato seja atualizado.
+- **Cenário:** Um contrato `VulnerableBank` que envia o ETH antes de zerar o saldo do usuário. Um contrato `Attacker` explora isso chamando `withdraw()` repetidamente. Inspirado no The DAO Hack (2016).
 
 ---
 
