@@ -1,0 +1,81 @@
+================================================================================
+ARQUIVO: carpc_issue_delegatecall_hijack.txt
+TÍTULO: [carpc_issue] Sequestro de Contrato via Delegatecall (Hijack de Contexto)
+AUTOR: Pesquisador de Segurança (Red Team)
+DATA: 2026-11-02
+VERSÃO: 1.0
+TAGS: #smart-contracts #solidity #delegatecall #hijack #red-team #lab2
+================================================================================
+
+## 1. DESCRIÇÃO DA VULNERABILIDADE
+
+O contrato VulnerableDelegate permite que qualquer endereço (EOA) execute código 
+de um contrato externo através da função `execute(address _target)`, que utiliza 
+`delegatecall`.
+
+A falha está na ausência de controle sobre o endereço `_target`. Um atacante pode 
+passar o endereço de um contrato malicioso (MaliciousLogic) que, ao ser executado 
+via delegatecall, altera o estado do contrato VulnerableDelegate. No exemplo, o 
+atacante sobrescreve a variável `owner` (slot 0 do storage), assumindo o controle 
+do contrato.
+
+## 2. CONTRATO VULNERÁVEL (src/DelegateCallVulnerable.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract MaliciousLogic {
+    function setOwner() public {
+        assembly {
+            sstore(0, caller())
+        }
+    }
+}
+
+contract VulnerableDelegate {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function execute(address _target) public {
+        (bool success, ) = _target.delegatecall(
+            abi.encodeWithSignature("setOwner()")
+        );
+        require(success, "Delegatecall failed");
+    }
+}
+
+## 3. PROVA DE CONCEITO (PoC)
+
+O teste em `test/DelegateCall.t.sol` demonstra que o atacante (endereço 0x2) 
+chama `execute(address(malicious))` e, após a execução, a variável `owner` do 
+contrato VulnerableDelegate é alterada para o endereço do atacante.
+
+## 4. IMPACTO
+
+- Sequestro de contexto: o atacante pode alterar qualquer variável de estado do 
+  contrato, incluindo permissões, saldos e endereços de controle.
+- Em contratos reais (como proxies ou carteiras), isso pode levar ao roubo 
+  total de fundos ou à tomada de controle administrativo.
+
+## 5. RECOMENDAÇÃO (BLUE TEAM)
+
+- Nunca permitir que o endereço do delegatecall seja arbitrário (fornecido pelo 
+  usuário). Ele deve ser fixo ou validado por uma lista branca (whitelist).
+- Se for necessário usar delegatecall, utilize padrões seguros como o 
+  `Transparent Proxy` ou `UUPS` (com controle de acesso rigoroso).
+- Auditar todas as chamadas de baixo nível (call, delegatecall, staticcall).
+
+## 6. LIÇÕES APRENDIDAS
+
+- O delegatecall é uma ferramenta poderosa, mas perigosa se usada sem controle.
+- O EIP-7702 (Ethereum) usa um conceito similar para permitir que carteiras 
+  executem código de contratos, mas exige uma assinatura explícita da carteira.
+- O ataque à Binance usou uma variação desse conceito (via autorização EIP-7702) 
+  para sequestrar a carteira e executar um contrato "sweeper".
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

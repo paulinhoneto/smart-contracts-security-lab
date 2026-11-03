@@ -1,0 +1,106 @@
+================================================================================
+ARQUIVO: carpc_issue_lab3_sweeper_eip7702_simulation.txt
+TÍTULO: [carpc_issue] Simulação de Sequestro de Carteira via Delegação (EIP-7702) e Sweeper
+AUTOR: Pesquisador de Segurança (Red Team)
+DATA: 2026-11-02
+VERSÃO: 1.0
+TAGS: #smart-contracts #solidity #delegatecall #eip7702 #sweeper #red-team #lab3
+================================================================================
+
+## 1. DESCRIÇÃO DA VULNERABILIDADE
+
+O laboratório simula o vetor de ataque utilizado no incidente da Binance (2026), 
+onde um contrato malicioso ("sweeper") é executado no contexto de uma carteira 
+vítima (VictimWallet) através de uma delegação (simulando o EIP-7702). 
+
+A falha explorada é a capacidade de a carteira executar código externo e permitir 
+que esse código acesse e transfira seus fundos. No cenário real, a delegação 
+ocorreu via assinatura EIP-7702 (obtida através do comprometimento do laptop do 
+engenheiro DevOps). No nosso lab, simulamos isso com a função `delegateTo`.
+
+## 2. CONTRATO VULNERÁVEL (src/Sweeper.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract MaliciousSweeper {
+    address constant ATTACKER = address(0x2);
+
+    function sweep() external {
+        payable(ATTACKER).transfer(address(this).balance);
+    }
+}
+
+contract VictimWallet {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    receive() external payable {}
+
+    function delegateTo(address _target) external {
+        require(msg.sender == owner, "Not the owner");
+        (bool success, ) = _target.delegatecall(
+            abi.encodeWithSignature("sweep()")
+        );
+        require(success, "Delegatecall failed");
+    }
+
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
+}
+
+## 3. PROVA DE CONCEITO (PoC) E EVOLUÇÃO DO TESTE
+
+O teste em `test/Sweeper.t.sol` passou por várias iterações até simular o ataque 
+com sucesso. Abaixo, a evolução e os erros encontrados:
+
+### 3.1. Tentativa 1 (Falha: "Not the owner")
+- Erro: O atacante (0x2) tentou chamar `delegateTo` diretamente.
+- Causa: A função `delegateTo` exige que o chamador seja o `owner` (0x1).
+- Lição: No ataque real, a vítima (Binance) é quem assina a delegação (via EIP-7702). 
+  O atacante apenas envia a transação com a assinatura roubada. No lab, a "vítima" 
+  deve ser quem chama `delegateTo`.
+
+### 3.2. Tentativa 2 (Falha: "Delegatecall failed")
+- Erro: Após a vítima chamar `delegateTo`, o `delegatecall` falhou.
+- Causa: O contrato `MaliciousSweeper` tentava acessar a variável `attacker`, 
+  que não existia no contexto do `VictimWallet` (o delegatecall usa o storage da vítima).
+- Lição: O sweeper não pode depender de variáveis de estado que não existem no 
+  contrato da vítima. Ele deve usar um endereço fixo (hardcoded) para o atacante.
+
+### 3.3. Tentativa 3 (Sucesso)
+- Solução: O sweeper foi reescrito com uma constante `ATTACKER = address(0x2)`.
+- Resultado: O teste passou, provando que a vítima (owner) assinou a delegação e 
+  o sweeper transferiu os 100 ETH para o atacante.
+
+## 4. IMPACTO
+
+- Sequestro de carteira: O atacante pode esvaziar completamente o saldo da vítima.
+- No ataque real, a Binance perdeu bilhões em várias redes.
+- A falha explora uma funcionalidade legítima (EIP-7702) de forma maliciosa.
+
+## 5. RECOMENDAÇÃO (BLUE TEAM)
+
+- Nunca permitir que uma carteira delegue a execução de código a um contrato 
+  externo sem uma verificação rigorosa.
+- Implementar limites de gastos e/ou multi-assinatura (multisig) para 
+  transferências de grandes valores.
+- Monitorar chamadas de `delegatecall` em carteiras quentes.
+- Treinar engenheiros DevOps contra engenharia social (o vetor de entrada real).
+
+## 6. LIÇÕES APRENDIDAS
+
+- O `delegatecall` é uma ferramenta poderosa que, se usada sem controle, permite 
+  o sequestro total de um contrato.
+- O EIP-7702 introduz um novo vetor de ataque que exige que as carteiras 
+  validem cuidadosamente as autorizações de delegação.
+- Testar o código em laboratório (como fizemos) é essencial para entender a 
+  mecânica e as sutilezas do ataque antes de aplicá-lo no mundo real.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

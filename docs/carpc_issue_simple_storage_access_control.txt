@@ -1,0 +1,59 @@
+================================================================================
+ARQUIVO: carpc_issue_simple_storage_access_control.txt
+TÍTULO: [carpc_issue] Falha de Controle de Acesso no Contrato SimpleStorage
+AUTOR: Pesquisador de Segurança (Red Team)
+DATA: 2026-11-01
+VERSÃO: 1.0
+TAGS: #smart-contracts #solidity #access-control #red-team #lab
+================================================================================
+
+## 1. DESCRIÇÃO DA VULNERABILIDADE
+
+O contrato SimpleStorage permite que qualquer endereço (EOA) altere o valor 
+armazenado na variável pública `storedNumber`. Não há verificação de permissão 
+(controle de acesso) na função `store`, o que significa que um atacante pode 
+sobrescrever o estado do contrato a qualquer momento.
+
+## 2. CONTRATO VULNERÁVEL (src/SimpleStorage.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract SimpleStorage {
+    uint256 public storedNumber;
+
+    function store(uint256 _number) public {
+        storedNumber = _number;
+    }
+
+    function retrieve() public view returns (uint256) {
+        return storedNumber;
+    }
+}
+
+## 3. PROVA DE CONCEITO (PoC)
+
+O teste em `test/SimpleStorage.t.sol` demonstra que o atacante (endereço 0x2) 
+consegue chamar `store(666)` e alterar o valor de `storedNumber`, mesmo sem ser 
+o dono do contrato.
+
+## 4. IMPACTO
+
+- Qualquer usuário pode modificar o estado do contrato.
+- Em um contrato real (ex: controle de saldo, permissões), isso pode levar a 
+  perda de fundos ou manipulação de dados sensíveis.
+
+## 5. RECOMENDAÇÃO (BLUE TEAM)
+
+Adicionar um modificador `onlyOwner` à função `store`, garantindo que apenas 
+o dono do contrato (quem o implantou) possa alterar o valor.
+
+## 6. LIÇÕES APRENDIDAS
+
+- Controle de acesso é a primeira camada de defesa em contratos inteligentes.
+- Sempre use modificadores em funções que alteram o estado.
+- Testes de segurança devem simular múltiplos atores (dono vs atacante).
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================
