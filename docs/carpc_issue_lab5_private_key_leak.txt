@@ -1,0 +1,99 @@
+================================================================================
+ARQUIVO: carpc_issue_lab5_private_key_leak.txt
+TÍTULO: [carpc_issue] Simulação de Roubo via Vazamento de Chave Privada
+AUTOR: Pesquisador de Segurança (Red Team)
+DATA: 2026-11-03
+VERSÃO: 1.0
+TAGS: #smart-contracts #solidity #private-key #opsec #red-team #lab5
+================================================================================
+
+## 1. DESCRIÇÃO DA VULNERABILIDADE
+
+O contrato PrivateKeyVault permite que o dono saque fundos apresentando uma 
+assinatura digital válida. No entanto, se a chave privada do dono for exposta 
+(vazada em um print, log, vídeo, etc.), qualquer pessoa pode usar essa chave 
+para forjar assinaturas válidas e drenar o cofre.
+
+## 2. CONTRATO VULNERÁVEL (src/PrivateKeyVault.sol)
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract PrivateKeyVault {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    receive() external payable {}
+
+    function withdrawWithSignature(
+        uint256 amount,
+        uint256 nonce,
+        bytes memory signature
+    ) public {
+        bytes32 messageHash = keccak256(abi.encodePacked(amount, nonce));
+        bytes32 ethSignedMessage = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
+        );
+        address signer = recoverSigner(ethSignedMessage, signature);
+        require(signer == owner, "Invalid signature");
+        require(address(this).balance >= amount, "Insufficient funds");
+        payable(msg.sender).transfer(amount);
+    }
+
+    function recoverSigner(bytes32 _ethSignedMessage, bytes memory _signature)
+        public
+        pure
+        returns (address)
+    {
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+        return ecrecover(_ethSignedMessage, v, r, s);
+    }
+
+    function splitSignature(bytes memory sig)
+        public
+        pure
+        returns (bytes32 r, bytes32 s, uint8 v)
+    {
+        require(sig.length == 65, "invalid signature length");
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
+        }
+    }
+}
+
+## 3. PROVA DE CONCEITO (PoC)
+
+O teste em `test/testPrivateKeyVault.t.sol` demonstra que:
+1. O cofre começa com 10 ETH.
+2. A chave privada do dono é "vazada" (simulada no teste).
+3. O atacante usa a chave vazada para assinar uma mensagem de saque de 10 ETH.
+4. O contrato valida a assinatura e transfere os 10 ETH para o atacante.
+
+## 4. IMPACTO
+
+- Perda total dos fundos do cofre.
+- Em cenários reais (como o incidente da live), a chave privada vazada permite 
+  que o atacante assuma o controle total da carteira.
+
+## 5. RECOMENDAÇÃO (BLUE TEAM)
+
+- Nunca expor a chave privada em logs, prints ou vídeos.
+- Utilizar hardware wallets (Ledger, Trezor) para armazenar chaves privadas.
+- Utilizar variáveis de ambiente seguras e cofres de segredos (AWS Secrets Manager, HashiCorp Vault).
+- Implementar múltiplas assinaturas (multisig) para fundos de alto valor.
+
+## 6. LIÇÕES APRENDIDAS
+
+- A segurança de uma carteira depende inteiramente da segurança da chave privada.
+- A blockchain é transparente e imutável; uma vez que a chave vaza, os fundos 
+  podem ser roubados instantaneamente.
+- A opsec (segurança operacional) é tão importante quanto a segurança do código.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

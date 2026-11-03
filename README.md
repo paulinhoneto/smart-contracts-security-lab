@@ -29,6 +29,11 @@ O objetivo deste repositório é compreender, na prática, como falhas de lógic
 **Conceito:** Chamada recursiva a uma função antes que o estado do contrato seja atualizado.
 - **Cenário:** Um contrato `VulnerableBank` que envia o ETH antes de zerar o saldo do usuário. Um contrato `Attacker` explora isso chamando `withdraw()` repetidamente. Inspirado no The DAO Hack (2016).
 
+### 🔹 Lab 5: Vazamento de Chave Privada (Simulação)
+**Conceito:** Exposição de chave privada e forja de assinaturas.
+- **Cenário:** Um contrato `PrivateKeyVault` que só permite saques com uma assinatura válida. A chave privada do dono é "vazada" (simulando um print ou log), permitindo que um atacante forje a assinatura e drene o cofre.
+- **Local:** `lab5/`
+
 ---
 
 ## 📂 Documentação e Issues
